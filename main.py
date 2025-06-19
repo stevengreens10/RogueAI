@@ -14,6 +14,7 @@ from game.shop import Shop
 from game.combat import CombatSystem
 from game.levelup import LevelingSystem, LevelUpReward
 from game.save_load import SaveLoadSystem
+from game.intro import IntroScreen
 
 
 class Game:
@@ -766,6 +767,12 @@ class Game:
 def main(stdscr):
     # Check for load argument
     load_game = len(sys.argv) > 1 and sys.argv[1] == '--load'
+    
+    # Show intro screen only for new games
+    if not load_game:
+        intro = IntroScreen(stdscr)
+        intro.run()
+    
     game = Game(stdscr, load_game)
     game.run()
 
