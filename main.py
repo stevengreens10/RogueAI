@@ -7,6 +7,7 @@ import curses
 import random
 import sys
 import os
+import math
 
 from game.entities import Entity, EntityType, Item, Position
 from game.dungeon import Dungeon, CellType
@@ -15,6 +16,7 @@ from game.combat import CombatSystem
 from game.levelup import LevelingSystem, LevelUpReward
 from game.save_load import SaveLoadSystem
 from game.intro import IntroScreen
+from game.renderer3d import Renderer3D
 
 
 class Game:
@@ -29,6 +31,10 @@ class Game:
         self.show_death_screen = False
         self.show_levelup_screen = False
         self.levelup_rewards = []
+        
+        # 3D rendering
+        self.render_3d = True
+        self.renderer_3d = Renderer3D(stdscr)
         
         if load_game and os.path.exists('savegame.json'):
             success, message = SaveLoadSystem.load_game(self)
@@ -106,6 +112,13 @@ class Game:
             self.messages.pop(0)
     
     def draw(self):
+        if self.render_3d and self.dungeon.player and not self.show_inventory and not self.in_shop and not self.show_death_screen and not self.show_levelup_screen:
+            # 3D rendering mode - player is at center of their tile
+            player = self.dungeon.player
+            self.renderer_3d.render_scene(self, float(player.pos.x) + 0.5, float(player.pos.y) + 0.5, player.angle)
+            return
+        
+        # Original 2D rendering for menus and inventory
         self.stdscr.clear()
         
         # Draw dungeon
@@ -197,7 +210,10 @@ class Game:
                     self.stdscr.addstr(msg_start + i, 0, msg, ui_color)
                 
                 # Instructions
-                self.stdscr.addstr(ui_y + 8, 0, "Move: wasd/hjkl/arrows, Inventory: i, Save: S, Quit: q", ui_color)
+                if self.render_3d:
+                    self.stdscr.addstr(ui_y + 8, 0, "3D: Arrows turn, WASD move, I: inventory, 3: toggle 2D/3D, S: save, Q: quit", ui_color)
+                else:
+                    self.stdscr.addstr(ui_y + 8, 0, "Move: wasd/hjkl/arrows, Inventory: i, 3: toggle 2D/3D, Save: S, Quit: q", ui_color)
                 
             except curses.error:
                 pass
@@ -233,28 +249,111 @@ class Game:
                 self.show_inventory = not self.show_inventory
             return True
         
+        if key == ord('3'):  # Toggle 3D mode
+            self.render_3d = not self.render_3d
+            self.add_message(f"3D mode: {'ON' if self.render_3d else 'OFF'}")
+            return True
+        
         if self.show_inventory:
             return self.handle_inventory_input(key)
         
         if not self.dungeon.player or self.dungeon.player.hp <= 0:
             return True
         
-        # Movement
-        dx, dy = 0, 0
-        if key in [ord('w'), ord('k'), curses.KEY_UP]:
-            dy = -1
-        elif key in [ord('s'), ord('j'), curses.KEY_DOWN]:
-            dy = 1
-        elif key in [ord('a'), ord('h'), curses.KEY_LEFT]:
-            dx = -1
-        elif key in [ord('d'), ord('l'), curses.KEY_RIGHT]:
-            dx = 1
-        
-        if dx != 0 or dy != 0:
-            self.move_player(dx, dy)
-            self.update_monsters()
+        # 3D Movement and rotation
+        if self.render_3d:
+            player = self.dungeon.player
+            player_moved = False
+            
+            # Arrow keys for rotation (90-degree increments, no game state progression)
+            if key == curses.KEY_LEFT:
+                player.angle -= math.pi / 2  # Rotate left 90 degrees
+                # Don't update monsters - just turning
+            elif key == curses.KEY_RIGHT:
+                player.angle += math.pi / 2  # Rotate right 90 degrees
+                # Don't update monsters - just turning
+            
+            # WASD for movement (progresses game state) - exactly one tile
+            elif key == ord('w'):  # Move forward
+                dx = int(round(math.cos(player.angle)))
+                dy = int(round(math.sin(player.angle)))
+                self.move_player(dx, dy)
+                player_moved = True
+            elif key == ord('s'):  # Move backward
+                dx = int(round(-math.cos(player.angle)))
+                dy = int(round(-math.sin(player.angle)))
+                self.move_player(dx, dy)
+                player_moved = True
+            elif key == ord('a'):  # Strafe left
+                dx = int(round(math.cos(player.angle - math.pi/2)))
+                dy = int(round(math.sin(player.angle - math.pi/2)))
+                self.move_player(dx, dy)
+                player_moved = True
+            elif key == ord('d'):  # Strafe right
+                dx = int(round(math.cos(player.angle + math.pi/2)))
+                dy = int(round(math.sin(player.angle + math.pi/2)))
+                self.move_player(dx, dy)
+                player_moved = True
+            
+            # Only update monsters when player actually moves, not when turning
+            if player_moved:
+                self.update_monsters()
+        else:
+            # Original 2D movement
+            dx, dy = 0, 0
+            if key in [ord('w'), ord('k'), curses.KEY_UP]:
+                dy = -1
+            elif key in [ord('s'), ord('j'), curses.KEY_DOWN]:
+                dy = 1
+            elif key in [ord('a'), ord('h'), curses.KEY_LEFT]:
+                dx = -1
+            elif key in [ord('d'), ord('l'), curses.KEY_RIGHT]:
+                dx = 1
+            
+            if dx != 0 or dy != 0:
+                self.move_player(dx, dy)
+                self.update_monsters()
         
         return True
+    
+    def move_player_3d(self, dx: float, dy: float):
+        """Move player in 3D mode with floating point precision"""
+        player = self.dungeon.player
+        
+        # Calculate new position
+        new_x = player.pos.x + dx
+        new_y = player.pos.y + dy
+        new_pos = Position(int(new_x), int(new_y))
+        
+        # Check bounds
+        if (new_pos.x < 0 or new_pos.x >= self.dungeon.width or 
+            new_pos.y < 0 or new_pos.y >= self.dungeon.height):
+            return
+        
+        # Check for walls
+        if not self.dungeon.is_walkable(new_pos):
+            return
+        
+        # Check for monsters
+        target = self.dungeon.get_entity_at(new_pos)
+        if target and target != player and target.hp > 0:
+            self.combat(player, target)
+            return
+        
+        # Check for stairs
+        if (self.dungeon.stairs_pos and 
+            new_pos.x == self.dungeon.stairs_pos.x and 
+            new_pos.y == self.dungeon.stairs_pos.y):
+            self.next_level()
+            return
+        
+        # Check for items to pick up
+        item = self.dungeon.get_item_at(new_pos)
+        if item:
+            self.pickup_item(item, new_pos)
+        
+        # Move player
+        player.pos = new_pos
     
     def move_player(self, dx: int, dy: int):
         player = self.dungeon.player
@@ -786,8 +885,10 @@ if __name__ == "__main__":
         print("  python3 main.py --help   # Show this help")
         print("")
         print("In-game controls:")
-        print("  wasd/hjkl/arrows - Move")
+        print("  3D Mode: Arrow keys turn, WASD move")
+        print("  2D Mode: wasd/hjkl/arrows move")
         print("  i         - Toggle inventory")
+        print("  3         - Toggle 2D/3D mode")
         print("  S         - Save game")
         print("  q         - Quit")
     else:

@@ -53,6 +53,7 @@ class Entity:
     xp: int = 0
     level: int = 1
     xp_value: int = 0  # XP this entity gives when killed
+    angle: float = 0.0  # Player rotation angle for 3D rendering
     
     def __post_init__(self):
         if self.inventory is None:

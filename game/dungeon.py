@@ -14,7 +14,7 @@ class CellType(Enum):
     FLOOR = '.'
     DOOR = '+'
     EMPTY = ' '
-    STAIRS_DOWN = '>'
+    STAIRS_DOWN = '▼'
 
 
 class Dungeon:
