@@ -353,6 +353,97 @@ class Renderer3D:
         except curses.error:
             pass
     
+    def render_weapon_sprite(self, player):
+        """Render the equipped weapon in the bottom center of the screen"""
+        if not player.weapon:
+            return
+        
+        # Weapon sprite positioned in bottom center, classic dungeon crawler style
+        weapon_width = 8
+        weapon_height = 6
+        sprite_x = (self.width - weapon_width) // 2
+        sprite_y = self.height - weapon_height - 4  # Move up to avoid UI overlap
+        
+        # Ensure weapon sprite fits on screen
+        if sprite_x < 0 or sprite_y < 0:
+            return
+        
+        weapon_color = curses.color_pair(6) | curses.A_BOLD if curses.has_colors() else curses.A_BOLD
+        
+        # Different weapon sprites based on weapon type/name
+        weapon_sprite = self.get_weapon_sprite(player.weapon)
+        
+        try:
+            for y, row in enumerate(weapon_sprite):
+                if sprite_y + y >= self.height:
+                    break
+                for x, char in enumerate(row):
+                    if sprite_x + x >= self.width or char == ' ':
+                        continue
+                    self.stdscr.addch(sprite_y + y, sprite_x + x, char, weapon_color)
+        except curses.error:
+            pass
+    
+    def get_weapon_sprite(self, weapon):
+        """Get ASCII art sprite for weapon based on its name"""
+        name_lower = weapon.name.lower()
+        
+        if 'sword' in name_lower:
+            return [
+                "   |    ",
+                "   |    ",
+                "  |||   ",
+                "  |||   ",
+                "  /_\\   ",
+                " (___) "
+            ]
+        elif 'dagger' in name_lower or 'knife' in name_lower:
+            return [
+                "   /    ",
+                "  /     ",
+                " /      ",
+                "/       ",
+                "\\       ",
+                " \\___   "
+            ]
+        elif 'axe' in name_lower:
+            return [
+                "  ___   ",
+                " /   \\  ",
+                "/     \\ ",
+                "\\     / ",
+                " \\___/  ",
+                "   |    "
+            ]
+        elif 'mace' in name_lower or 'club' in name_lower:
+            return [
+                "  ___   ",
+                " /###\\  ",
+                " |###|  ",
+                " \\___/  ",
+                "   |    ",
+                "   |    "
+            ]
+        elif 'staff' in name_lower or 'wand' in name_lower:
+            return [
+                "   *    ",
+                "  /|\\   ",
+                "   |    ",
+                "   |    ",
+                "   |    ",
+                "  ___   "
+            ]
+        else:
+            # Generic weapon sprite
+            return [
+                "   )    ",
+                "  ))    ",
+                " )))    ",
+                "  ))    ",
+                "  ))    ",
+                " (__    "
+            ]
+    
     def render_ui(self, game):
         """Render 3D UI elements"""
         if not game.dungeon.player:
@@ -408,5 +499,9 @@ class Renderer3D:
         # Render UI elements
         self.render_minimap(dungeon, player_x, player_y, player_angle)
         self.render_ui(game)
+        
+        # Render equipped weapon sprite
+        if game.dungeon.player:
+            self.render_weapon_sprite(game.dungeon.player)
         
         self.stdscr.refresh()
