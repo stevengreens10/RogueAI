@@ -354,23 +354,23 @@ class Renderer3D:
             pass
     
     def render_weapon_sprite(self, player):
-        """Render the equipped weapon in the bottom center of the screen"""
+        """Render the equipped weapon on the left side of the screen like you're carrying it"""
         if not player.weapon:
             return
         
-        # Weapon sprite positioned in bottom center, classic dungeon crawler style
-        weapon_width = 8
-        weapon_height = 6
-        sprite_x = (self.width - weapon_width) // 2
-        sprite_y = self.height - weapon_height - 4  # Move up to avoid UI overlap
+        # Weapon sprite positioned on left side, larger and more immersive
+        weapon_width = 12
+        weapon_height = 10
+        sprite_x = 2  # Left side of screen with small margin
+        sprite_y = self.height - weapon_height - 6  # Bottom area but higher up
         
         # Ensure weapon sprite fits on screen
-        if sprite_x < 0 or sprite_y < 0:
+        if sprite_x < 0 or sprite_y < 0 or sprite_x + weapon_width >= self.width:
             return
         
         weapon_color = curses.color_pair(6) | curses.A_BOLD if curses.has_colors() else curses.A_BOLD
         
-        # Different weapon sprites based on weapon type/name
+        # Different weapon sprites based on weapon type/name - larger versions
         weapon_sprite = self.get_weapon_sprite(player.weapon)
         
         try:
@@ -385,63 +385,189 @@ class Renderer3D:
             pass
     
     def get_weapon_sprite(self, weapon):
-        """Get ASCII art sprite for weapon based on its name"""
+        """Get ASCII art sprite for weapon based on its name - larger, more detailed"""
         name_lower = weapon.name.lower()
         
         if 'sword' in name_lower:
             return [
-                "   |    ",
-                "   |    ",
-                "  |||   ",
-                "  |||   ",
-                "  /_\\   ",
-                " (___) "
+                "    /\\    ",
+                "   /  \\   ",
+                "  /    \\  ",
+                "  | || |  ",
+                "  | || |  ",
+                "  | || |  ",
+                "  | || |  ",
+                "   \\__/   ",
+                "    ||    ",
+                "  (____) "
             ]
         elif 'dagger' in name_lower or 'knife' in name_lower:
             return [
-                "   /    ",
-                "  /     ",
-                " /      ",
-                "/       ",
-                "\\       ",
-                " \\___   "
+                "    /     ",
+                "   /      ",
+                "  /       ",
+                " /        ",
+                "/         ",
+                "\\         ",
+                " \\        ",
+                "  \\___    ",
+                "   |      ",
+                " (___) "
             ]
         elif 'axe' in name_lower:
             return [
-                "  ___   ",
-                " /   \\  ",
-                "/     \\ ",
-                "\\     / ",
-                " \\___/  ",
-                "   |    "
+                "  _____   ",
+                " /     \\  ",
+                "/       \\ ",
+                "\\       / ",
+                " \\     /  ",
+                "  \\___/   ",
+                "    |     ",
+                "    |     ",
+                "    |     ",
+                " (____) "
             ]
         elif 'mace' in name_lower or 'club' in name_lower:
             return [
-                "  ___   ",
-                " /###\\  ",
-                " |###|  ",
-                " \\___/  ",
-                "   |    ",
-                "   |    "
+                "  _____   ",
+                " /#####\\  ",
+                "|#######| ",
+                "|#######| ",
+                "|#######| ",
+                " \\#####/  ",
+                "    |     ",
+                "    |     ",
+                "    |     ",
+                " (____) "
             ]
         elif 'staff' in name_lower or 'wand' in name_lower:
             return [
-                "   *    ",
-                "  /|\\   ",
-                "   |    ",
-                "   |    ",
-                "   |    ",
-                "  ___   "
+                "    *     ",
+                "   /|\\    ",
+                "  / | \\   ",
+                "    |     ",
+                "    |     ",
+                "    |     ",
+                "    |     ",
+                "    |     ",
+                "    |     ",
+                " (____) "
             ]
         else:
             # Generic weapon sprite
             return [
-                "   )    ",
-                "  ))    ",
-                " )))    ",
-                "  ))    ",
-                "  ))    ",
-                " (__    "
+                "    )     ",
+                "   ))     ",
+                "  )))     ",
+                " ))))     ",
+                "  )))     ",
+                "  )))     ",
+                "   ))     ",
+                "   ))     ",
+                "   ))     ",
+                " (____) "
+            ]
+    
+    def render_shield_sprite(self, player):
+        """Render the equipped shield on the right side of the screen"""
+        if not player.shield:
+            return
+        
+        # Shield sprite positioned on right side, matching weapon size
+        shield_width = 12
+        shield_height = 10
+        sprite_x = self.width - shield_width - 2  # Right side with small margin
+        sprite_y = self.height - shield_height - 6  # Same vertical position as weapon
+        
+        # Ensure shield sprite fits on screen
+        if sprite_x < 0 or sprite_y < 0 or sprite_x + shield_width >= self.width:
+            return
+        
+        shield_color = curses.color_pair(4) | curses.A_BOLD if curses.has_colors() else curses.A_BOLD  # Green for shields
+        
+        # Different shield sprites based on shield type/name
+        shield_sprite = self.get_shield_sprite(player.shield)
+        
+        try:
+            for y, row in enumerate(shield_sprite):
+                if sprite_y + y >= self.height:
+                    break
+                for x, char in enumerate(row):
+                    if sprite_x + x >= self.width or char == ' ':
+                        continue
+                    self.stdscr.addch(sprite_y + y, sprite_x + x, char, shield_color)
+        except curses.error:
+            pass
+    
+    def get_shield_sprite(self, shield):
+        """Get ASCII art sprite for shield based on its name - larger, more detailed"""
+        name_lower = shield.name.lower()
+        
+        if 'buckler' in name_lower or 'small' in name_lower:
+            return [
+                "   ____   ",
+                "  /    \\  ",
+                " |  /\\  | ",
+                " | /  \\ | ",
+                " | \\  / | ",
+                " |  \\/  | ",
+                "  \\    /  ",
+                "   \\__/   ",
+                "    ||    ",
+                "  (____) "
+            ]
+        elif 'tower' in name_lower or 'large' in name_lower or 'great' in name_lower:
+            return [
+                "  ______  ",
+                " |######| ",
+                " |#    #| ",
+                " |# ++ #| ",
+                " |# ++ #| ",
+                " |# ++ #| ",
+                " |# ++ #| ",
+                " |#____#| ",
+                "  \\____/  ",
+                "   (__) "
+            ]
+        elif 'kite' in name_lower or 'heater' in name_lower:
+            return [
+                "  ______  ",
+                " /      \\ ",
+                "|   /\\   |",
+                "|  /  \\  |",
+                "|  \\  /  |",
+                "|   \\/   |",
+                " \\      / ",
+                "  \\    /  ",
+                "   \\__/   ",
+                "   (__) "
+            ]
+        elif 'round' in name_lower or 'circular' in name_lower:
+            return [
+                "   ____   ",
+                "  /    \\  ",
+                " /  /\\  \\ ",
+                "|  /  \\  |",
+                "|  \\  /  |",
+                " \\  \\/  / ",
+                "  \\    /  ",
+                "   \\__/   ",
+                "    ||    ",
+                "  (____) "
+            ]
+        else:
+            # Generic shield sprite - standard medieval shield
+            return [
+                "  ______  ",
+                " /      \\ ",
+                "|   ++   |",
+                "|   ++   |",
+                "|   ++   |",
+                "|   ++   |",
+                " \\      / ",
+                "  \\____/  ",
+                "    ||    ",
+                "  (____) "
             ]
     
     def render_ui(self, game):
@@ -459,10 +585,16 @@ class Renderer3D:
             hp_bar = f"HP: {player.hp}/{player.max_hp}"
             self.stdscr.addstr(ui_y, 1, hp_bar, ui_color)
             
-            # Weapon info
+            # Weapon and shield info
             if player.weapon:
                 weapon_info = f"Weapon: {player.weapon.name}"
                 self.stdscr.addstr(ui_y + 1, 1, weapon_info, ui_color)
+            
+            if player.shield:
+                shield_info = f"Shield: {player.shield.name}"
+                # Position shield info on the right side to match shield sprite
+                shield_x = self.width - len(shield_info) - 1
+                self.stdscr.addstr(ui_y + 1, shield_x, shield_info, ui_color)
             
             # Level and gold
             level_info = f"Floor: {game.current_level} | Gold: {player.gold}"
@@ -500,8 +632,9 @@ class Renderer3D:
         self.render_minimap(dungeon, player_x, player_y, player_angle)
         self.render_ui(game)
         
-        # Render equipped weapon sprite
+        # Render equipped weapon and shield sprites
         if game.dungeon.player:
             self.render_weapon_sprite(game.dungeon.player)
+            self.render_shield_sprite(game.dungeon.player)
         
         self.stdscr.refresh()

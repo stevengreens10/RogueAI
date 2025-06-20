@@ -33,7 +33,7 @@ class Game:
         self.levelup_rewards = []
         
         # 3D rendering
-        self.render_3d = True
+        self.render_3d = False
         self.renderer_3d = Renderer3D(stdscr)
         
         if load_game and os.path.exists('savegame.json'):
