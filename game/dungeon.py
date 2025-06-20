@@ -6,7 +6,7 @@ import random
 from enum import Enum
 from typing import List, Tuple, Optional
 
-from .entities import Entity, EntityType, Item, Position
+from .entities import Entity, EntityType, Item, Position, SpellType
 
 
 class CellType(Enum):
@@ -125,10 +125,12 @@ class Dungeon:
                 item_pos = Position(x + random.randint(1, w-2), y + random.randint(1, h-2))
                 # Make sure item doesn't spawn on entities
                 if not self.get_entity_at(item_pos):
-                    # Add shields to possible loot at level 2+
+                    # Add shields at level 2+, spellbooks at level 3+
                     possible_items = [EntityType.POTION, EntityType.WEAPON, EntityType.GOLD]
                     if self.level >= 2:
                         possible_items.append(EntityType.SHIELD)
+                    if self.level >= 3:
+                        possible_items.append(EntityType.SPELLBOOK)
                     
                     item_type = random.choice(possible_items)
                     if item_type == EntityType.POTION:
@@ -144,6 +146,13 @@ class Dungeon:
                         shield_name, base_defense = random.choice(shields)
                         defense_bonus = base_defense + max(0, (self.level - 2))
                         item = Item(shield_name, item_type, value=defense_bonus * 7, defense_bonus=defense_bonus)
+                    elif item_type == EntityType.SPELLBOOK:
+                        # Create spellbook using magic system
+                        from .magic import MagicSystem
+                        magic_system = MagicSystem()
+                        available_spells = list(SpellType)
+                        spell_type = random.choice(available_spells)
+                        item = magic_system.create_spellbook(spell_type, self.level)
                     else:  # GOLD
                         gold_amount = random.randint(3, 15) + (self.level - 1) * 5
                         item = Item("Gold Coins", item_type, value=gold_amount)

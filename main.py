@@ -17,6 +17,7 @@ from game.levelup import LevelingSystem, LevelUpReward
 from game.save_load import SaveLoadSystem
 from game.intro import IntroScreen
 from game.renderer3d import Renderer3D
+from game.magic import MagicSystem
 
 
 class Game:
@@ -35,6 +36,11 @@ class Game:
         # 3D rendering
         self.render_3d = False
         self.renderer_3d = Renderer3D(stdscr)
+        
+        # Magic system
+        self.magic_system = MagicSystem()
+        self.spell_targeting = False
+        self.targeting_spell = None
         
         if load_game and os.path.exists('savegame.json'):
             success, message = SaveLoadSystem.load_game(self)
@@ -74,6 +80,7 @@ class Game:
             curses.init_pair(8, curses.COLOR_MAGENTA, -1)  # UI text
             curses.init_pair(9, curses.COLOR_WHITE, -1)    # Stairs
             curses.init_pair(10, curses.COLOR_MAGENTA, -1) # Shopkeeper
+            curses.init_pair(11, curses.COLOR_MAGENTA, -1) # Spellbooks
     
     def get_color_pair(self, entity_type=None, cell_type=None):
         if not curses.has_colors():
@@ -92,6 +99,8 @@ class Game:
                 return curses.color_pair(5)  # Same color as weapons for now
             elif entity_type == EntityType.GOLD:
                 return curses.color_pair(6)
+            elif entity_type == EntityType.SPELLBOOK:
+                return curses.color_pair(11)  # Purple for spellbooks
         
         if cell_type:
             if cell_type == CellType.FLOOR:
@@ -168,10 +177,14 @@ class Game:
                     hp_color = curses.color_pair(3) if player.hp < player.max_hp * 0.3 else ui_color
                     self.stdscr.addstr(ui_y, 0, f"HP: {player.hp}/{player.max_hp}", hp_color)
                     
+                    # Mana display with color coding
+                    mana_color = curses.color_pair(11) if curses.has_colors() else ui_color
+                    self.stdscr.addstr(ui_y + 1, 0, f"MP: {player.mana}/{player.max_mana}", mana_color)
+                    
                     attack_total = player.attack + (player.weapon.attack_bonus if player.weapon else 0)
                     defense_total = player.defense + (player.weapon.defense_bonus if player.weapon else 0) + (player.shield.defense_bonus if player.shield else 0)
-                    self.stdscr.addstr(ui_y, 20, f"Attack: {attack_total}", ui_color)
-                    self.stdscr.addstr(ui_y, 35, f"Defense: {defense_total}", ui_color)
+                    self.stdscr.addstr(ui_y + 1, 20, f"Attack: {attack_total}", ui_color)
+                    self.stdscr.addstr(ui_y + 1, 35, f"Defense: {defense_total}", ui_color)
                     
                     # Gold with color
                     gold_color = curses.color_pair(6) if curses.has_colors() else 0
@@ -211,9 +224,9 @@ class Game:
                 
                 # Instructions
                 if self.render_3d:
-                    self.stdscr.addstr(ui_y + 8, 0, "3D: Arrows turn, WASD move, I: inventory, 3: toggle 2D/3D, S: save, Q: quit", ui_color)
+                    self.stdscr.addstr(ui_y + 8, 0, "3D: Arrows turn, WASD move, I: inventory, F: cast spell, 3: toggle 2D/3D, S: save, Q: quit", ui_color)
                 else:
-                    self.stdscr.addstr(ui_y + 8, 0, "Move: wasd/hjkl/arrows, Inventory: i, 3: toggle 2D/3D, Save: S, Quit: q", ui_color)
+                    self.stdscr.addstr(ui_y + 8, 0, "Move: wasd/hjkl/arrows, Inventory: i, F: cast spell, 3: toggle 2D/3D, Save: S, Quit: q", ui_color)
                 
             except curses.error:
                 pass
@@ -253,6 +266,12 @@ class Game:
             self.render_3d = not self.render_3d
             self.add_message(f"3D mode: {'ON' if self.render_3d else 'OFF'}")
             return True
+        
+        if key == ord('f') or key == ord('F'):  # Cast spell
+            return self.handle_spell_casting()
+        
+        if self.spell_targeting:
+            return self.handle_spell_targeting(key)
         
         if self.show_inventory:
             return self.handle_inventory_input(key)
@@ -411,9 +430,27 @@ class Game:
                         self.trigger_level_up()
     
     def update_monsters(self):
+        # Regenerate player mana each turn
+        player = self.dungeon.player
+        if player and player.hp > 0:
+            if player.mana < player.max_mana:
+                player.mana = min(player.max_mana, player.mana + 1)  # Slow mana regen
+            
+            # Update magical effects
+            effect_messages = self.magic_system.update_effects(player)
+            for msg in effect_messages:
+                self.add_message(msg)
+        
         for entity in self.dungeon.entities:
             if entity.type in [EntityType.GOBLIN, EntityType.ORC] and entity.hp > 0:
-                self.move_monster(entity)
+                # Update magical effects on monsters too
+                effect_messages = self.magic_system.update_effects(entity)
+                for msg in effect_messages:
+                    self.add_message(msg)
+                
+                # Check if monster is frozen
+                if not self.magic_system.is_frozen(entity):
+                    self.move_monster(entity)
     
     def move_monster(self, monster: Entity):
         player = self.dungeon.player
@@ -566,6 +603,13 @@ class Game:
                     healed = self.dungeon.player.hp - old_hp
                     self.dungeon.player.inventory.pop(index)
                     self.add_message(f"You used {item.name} and healed {healed} HP!")
+                    
+                elif item.type == EntityType.SPELLBOOK:
+                    # Learn spell from spellbook
+                    success, message = self.magic_system.learn_spell_from_book(self.dungeon.player, item)
+                    self.add_message(message)
+                    if success:
+                        self.dungeon.player.inventory.pop(index)  # Remove spellbook after learning
         
         return True
     
@@ -655,6 +699,123 @@ class Game:
             
         except curses.error:
             pass
+    
+    def handle_spell_casting(self):
+        """Handle spell casting - show spell selection menu"""
+        if not self.dungeon.player or self.dungeon.player.hp <= 0:
+            return True
+        
+        player = self.dungeon.player
+        available_spells = self.magic_system.get_available_spells(player)
+        
+        if not available_spells:
+            self.add_message("You don't know any spells!")
+            return True
+        
+        self.stdscr.clear()
+        
+        try:
+            title = "Cast Spell (ESC to cancel)"
+            self.stdscr.addstr(1, 2, title, curses.A_BOLD)
+            
+            mana_info = f"Mana: {player.mana}/{player.max_mana}"
+            self.stdscr.addstr(2, 2, mana_info)
+            
+            y = 4
+            for i, (spell, can_cast) in enumerate(available_spells):
+                if i >= 9:  # Only show first 9 spells
+                    break
+                
+                color = curses.A_NORMAL if can_cast else curses.A_DIM
+                spell_text = f"{i+1}. {spell.name} (Cost: {spell.mana_cost})"
+                if not can_cast:
+                    spell_text += " - Not enough mana"
+                
+                self.stdscr.addstr(y, 4, spell_text, color)
+                self.stdscr.addstr(y+1, 6, spell.description, curses.A_DIM)
+                y += 3
+            
+            self.stdscr.addstr(y+1, 2, "Select spell (1-9) or ESC to cancel")
+            self.stdscr.refresh()
+            
+            # Wait for input
+            key = self.stdscr.getch()
+            
+            if key == 27:  # ESC
+                return True
+            
+            if key >= ord('1') and key <= ord('9'):
+                spell_index = key - ord('1')
+                if spell_index < len(available_spells):
+                    spell, can_cast = available_spells[spell_index]
+                    if can_cast:
+                        return self.initiate_spell_casting(spell)
+                    else:
+                        self.add_message("Not enough mana to cast that spell.")
+            
+        except curses.error:
+            pass
+        
+        return True
+    
+    def initiate_spell_casting(self, spell):
+        """Start the spell casting process - may require targeting"""
+        player = self.dungeon.player
+        
+        # Spells that don't need targeting
+        if spell.spell_type.value in ['heal', 'shield']:
+            success, message = self.magic_system.cast_spell(player, spell, self.dungeon)
+            self.add_message(message)
+            if success:
+                self.update_monsters()  # End turn after casting
+            return True
+        
+        # Spells that need targeting
+        self.spell_targeting = True
+        self.targeting_spell = spell
+        self.add_message(f"Select target for {spell.name} (Arrow keys to aim, ENTER to cast, ESC to cancel)")
+        return True
+    
+    def handle_spell_targeting(self, key):
+        """Handle targeting mode for spells"""
+        player = self.dungeon.player
+        
+        if key == 27:  # ESC - cancel targeting
+            self.spell_targeting = False
+            self.targeting_spell = None
+            self.add_message("Spell casting cancelled.")
+            return True
+        
+        if key == ord('\n') or key == ord('\r') or key == 10:  # ENTER - cast spell
+            # Calculate target position based on player facing direction
+            if self.render_3d:
+                # In 3D mode, cast in facing direction
+                target_x = player.pos.x + int(round(math.cos(player.angle)))
+                target_y = player.pos.y + int(round(math.sin(player.angle)))
+            else:
+                # In 2D mode, default to 1 tile ahead (facing down)
+                target_x = player.pos.x
+                target_y = player.pos.y + 1
+            
+            target_pos = Position(target_x, target_y)
+            
+            success, message = self.magic_system.cast_spell(player, self.targeting_spell, self.dungeon, target_pos)
+            self.add_message(message)
+            
+            self.spell_targeting = False
+            self.targeting_spell = None
+            
+            if success:
+                self.update_monsters()  # End turn after casting
+            
+            return True
+        
+        # Arrow keys for targeting in 2D mode (in 3D mode, just use facing direction)
+        if not self.render_3d:
+            # TODO: Implement cursor-based targeting for 2D mode
+            pass
+        
+        return True
     
     def handle_shop_input(self, key):
         if key == ord('e') or key == ord('E'):  # Use 'e' to exit shop

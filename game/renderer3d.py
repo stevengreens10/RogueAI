@@ -251,6 +251,8 @@ class Renderer3D:
             return curses.color_pair(6)  # Gold
         elif entity_type == EntityType.POTION:
             return curses.color_pair(4)  # Green
+        elif entity_type == EntityType.SPELLBOOK:
+            return curses.color_pair(11)  # Purple
         else:
             return curses.color_pair(1)  # White
     
