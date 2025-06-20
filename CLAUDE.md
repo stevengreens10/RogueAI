@@ -4,42 +4,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Running and Testing
 
-### Windows
-```cmd
-# Quick setup
-python setup_windows.py
+### Windowed Version (Recommended)
+```bash
+# Setup for windowed version
+python3 setup_windowed.py
 
-# Run the game
-python main.py
+# Run windowed game
+python3 main_windowed.py
 
-# Load saved game
-python main.py --load
+# Load saved game (windowed)
+python3 main_windowed.py --load
+
+# Universal launcher (auto-detects pygame)
+python3 launch_windowed.py
 ```
 
-### macOS/Linux
+### CLI Version (Original)
 ```bash
-# Run the game
+# Windows setup
+python setup_windows.py
+
+# Run CLI game
 python3 main.py
 
-# Load saved game
+# Load saved game (CLI)
 python3 main.py --load
 
 # Show help and controls
 python3 main.py --help
 ```
 
-The game is cross-platform compatible (Windows, macOS, Linux). On Windows, it requires the `windows-curses` package. The game has no build system, test framework, or linting - it runs directly with Python 3.6+.
+The game is cross-platform compatible (Windows, macOS, Linux). The windowed version requires pygame, while the CLI version requires curses (windows-curses on Windows). The game has no build system, test framework, or linting - it runs directly with Python 3.6+.
 
 ## Architecture Overview
 
-AIRogue is a modular CLI roguelike with dual rendering modes (2D ASCII and 3D raycasting). The architecture centers around a main `Game` class that orchestrates all systems.
+AIRogue is a modular roguelike with dual rendering modes (2D ASCII and 3D raycasting). The game now has two main implementations:
+
+1. **CLI Version (main.py)**: Original curses-based terminal interface
+2. **Windowed Version (main_windowed.py)**: Pygame-based windowed interface
+
+Both versions share the same core game systems and logic from the `game/` directory. The architecture centers around main game classes that orchestrate all systems.
 
 ### Core Systems Integration
 
-- **main.py**: Contains the main game loop, input handling, and dual rendering coordination
+- **main.py / main_windowed.py**: Contains the main game loop, input handling, and rendering coordination
 - **game/entities.py**: Fundamental data structures (Entity, Item, Position) used across all systems
 - **game/dungeon.py**: Procedural generation and spatial management for all game objects
-- **game/renderer3d.py**: Raycasting 3D engine with weapon sprites, minimap, and entity rendering
+- **game/renderer3d.py / renderer3d_pygame.py**: Raycasting 3D engines for CLI and windowed versions
+- **game/window_renderer.py**: Pygame-based windowed rendering system
 
 ### Key Architectural Patterns
 
