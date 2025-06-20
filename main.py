@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
 """
 AIRogue - A CLI-based roguelike game
+Cross-platform compatible (Windows, macOS, Linux)
 """
 
-import curses
 import random
 import sys
 import os
 import math
+import platform
+
+# Windows-compatible curses import
+try:
+    import curses
+except ImportError:
+    print("Error: curses module not found!")
+    print("On Windows, install with: pip install windows-curses")
+    print("On other systems, curses should be included with Python")
+    sys.exit(1)
 
 from game.entities import Entity, EntityType, Item, Position
 from game.dungeon import Dungeon, CellType
@@ -19,6 +29,43 @@ from game.intro import IntroScreen
 from game.renderer3d import Renderer3D
 from game.magic import MagicSystem
 from game.boss import BossSystem
+
+
+class WindowsCompatibility:
+    """Handle Windows-specific terminal compatibility"""
+    
+    @staticmethod
+    def setup_windows_terminal():
+        """Configure Windows terminal for better compatibility"""
+        if platform.system() == "Windows":
+            # Enable ANSI escape sequences on Windows 10+
+            try:
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+            except:
+                pass  # Ignore if it fails
+    
+    @staticmethod
+    def get_safe_char(char, fallback='?'):
+        """Get a Windows-safe character with fallback"""
+        if platform.system() == "Windows":
+            # Windows-safe character replacements
+            replacements = {
+                '▼': 'v',  # Down stairs
+                '▲': '^',  # Up stairs (if used)
+                '►': '>',  # Right arrow
+                '◄': '<',  # Left arrow
+                '♦': '*',  # Diamond
+                '♠': '*',  # Spade
+                '♣': '*',  # Club
+                '♥': '*',  # Heart
+                '█': '#',  # Block
+                '▒': ':',  # Medium shade
+                '░': '.',  # Light shade
+            }
+            return replacements.get(char, char)
+        return char
 
 
 class Game:
@@ -60,6 +107,9 @@ class Game:
                 self.start_new_game()
         else:
             self.start_new_game()
+        
+        # Setup Windows compatibility
+        WindowsCompatibility.setup_windows_terminal()
         
         # Setup curses
         curses.curs_set(0)  # Hide cursor
@@ -147,16 +197,19 @@ class Game:
             for x in range(self.dungeon.width):
                 try:
                     char = self.dungeon.grid[y][x].value
+                    # Use Windows-safe characters
+                    safe_char = WindowsCompatibility.get_safe_char(char)
                     color = self.get_color_pair(cell_type=self.dungeon.grid[y][x])
-                    self.stdscr.addch(y, x, char, color)
+                    self.stdscr.addch(y, x, safe_char, color)
                 except curses.error:
                     pass
         
         # Draw items
         for item_pos, item in self.dungeon.items:
             try:
+                char = WindowsCompatibility.get_safe_char(item.type.value)
                 color = self.get_color_pair(entity_type=item.type)
-                self.stdscr.addch(item_pos.y, item_pos.x, item.type.value, color)
+                self.stdscr.addch(item_pos.y, item_pos.x, char, color)
             except curses.error:
                 pass
         
@@ -164,8 +217,9 @@ class Game:
         for entity in self.dungeon.entities:
             if entity.hp > 0:
                 try:
+                    char = WindowsCompatibility.get_safe_char(entity.type.value)
                     color = self.get_color_pair(entity_type=entity.type)
-                    self.stdscr.addch(entity.pos.y, entity.pos.x, entity.type.value, color)
+                    self.stdscr.addch(entity.pos.y, entity.pos.x, char, color)
                 except curses.error:
                     pass
         
@@ -1335,32 +1389,67 @@ class Game:
 
 
 def main(stdscr):
-    # Check for load argument
-    load_game = len(sys.argv) > 1 and sys.argv[1] == '--load'
-    
-    # Show intro screen only for new games
-    if not load_game:
-        intro = IntroScreen(stdscr)
-        intro.run()
-    
-    game = Game(stdscr, load_game)
-    game.run()
+    try:
+        # Check for load argument
+        load_game = len(sys.argv) > 1 and sys.argv[1] == '--load'
+        
+        # Show intro screen only for new games
+        if not load_game:
+            intro = IntroScreen(stdscr)
+            intro.run()
+        
+        game = Game(stdscr, load_game)
+        game.run()
+    except KeyboardInterrupt:
+        # Handle Ctrl+C gracefully
+        pass
+    except Exception as e:
+        # Handle any other errors
+        curses.endwin()
+        print(f"Error: {e}")
+        if platform.system() == "Windows":
+            print("\nIf you're having trouble on Windows:")
+            print("1. Install windows-curses: pip install windows-curses")
+            print("2. Use Windows Terminal or PowerShell for better compatibility")
+            print("3. Ensure your terminal supports Unicode characters")
+        raise
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == '--help':
         print("AIRogue - A CLI-based roguelike game")
+        print("Cross-platform compatible (Windows, macOS, Linux)")
+        print("")
         print("Usage:")
-        print("  python3 main.py          # Start new game")
-        print("  python3 main.py --load   # Load saved game")
-        print("  python3 main.py --help   # Show this help")
+        print("  python main.py          # Start new game")
+        print("  python main.py --load   # Load saved game")
+        print("  python main.py --help   # Show this help")
         print("")
         print("In-game controls:")
         print("  3D Mode: Arrow keys turn, WASD move")
         print("  2D Mode: wasd/hjkl/arrows move")
         print("  i         - Toggle inventory")
+        print("  m/M       - View/cast spells")
+        print("  f/F       - Cast spell")
+        print("  g/G       - Toggle godmode")
         print("  3         - Toggle 2D/3D mode")
         print("  S         - Save game")
         print("  q         - Quit")
+        print("")
+        if platform.system() == "Windows":
+            print("Windows Setup:")
+            print("  pip install windows-curses")
+            print("  Use Windows Terminal for best experience")
     else:
-        curses.wrapper(main)
+        try:
+            curses.wrapper(main)
+        except Exception as e:
+            print(f"Failed to start game: {e}")
+            if platform.system() == "Windows":
+                print("\nWindows troubleshooting:")
+                print("1. Install: pip install windows-curses")
+                print("2. Use Windows Terminal instead of Command Prompt")
+                print("3. Try: python -m pip install --upgrade windows-curses")
+            else:
+                print("Make sure you have a compatible terminal that supports curses")
+            sys.exit(1)

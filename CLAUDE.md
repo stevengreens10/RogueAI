@@ -4,6 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Running and Testing
 
+### Windows
+```cmd
+# Quick setup
+python setup_windows.py
+
+# Run the game
+python main.py
+
+# Load saved game
+python main.py --load
+```
+
+### macOS/Linux
 ```bash
 # Run the game
 python3 main.py
@@ -15,7 +28,7 @@ python3 main.py --load
 python3 main.py --help
 ```
 
-The game has no build system, test framework, or linting - it runs directly with Python 3.6+ and uses only standard library modules.
+The game is cross-platform compatible (Windows, macOS, Linux). On Windows, it requires the `windows-curses` package. The game has no build system, test framework, or linting - it runs directly with Python 3.6+.
 
 ## Architecture Overview
 

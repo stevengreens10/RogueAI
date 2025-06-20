@@ -2,6 +2,8 @@
 
 A CLI-based roguelike game inspired by the original Rogue.
 
+**✨ Now fully compatible with Windows, macOS, and Linux! ✨**
+
 ## Features
 
 - Procedurally generated dungeons with rooms and corridors
@@ -15,32 +17,68 @@ A CLI-based roguelike game inspired by the original Rogue.
 - **Buy/sell mechanics** at mysterious shops
 - **XP and leveling system** with character progression
 - **Level-up rewards** with 5 different upgrade paths
+- **Complete magic system** with 8 different spells and spellbooks
+- **Dual equipment system** - weapons and shields/spellbooks
+- **3D raycasting mode** - Toggle between 2D ASCII and 3D first-person view
+- **Epic boss battles** with special abilities and multiple phases
+- **Godmode** for testing and casual play
 - **Death screen** with restart, load, or quit options
+- **Victory screen** when you defeat a boss
 - Save/load game functionality
 - **Color-coded graphics** for enhanced visual experience
+- **Cross-platform compatibility** (Windows, macOS, Linux)
 - Multiple movement options (WASD, vi-keys, arrow keys)
 - Real-time terminal rendering using curses
+
+## Installation & Setup
+
+### Windows
+```cmd
+# Quick setup (recommended)
+python setup_windows.py
+
+# Or manual setup
+pip install windows-curses
+python main.py
+```
+
+### macOS & Linux
+```bash
+# No additional setup needed
+python3 main.py
+```
 
 ## How to Play
 
 ```bash
 # Start new game
-python3 main.py
+python main.py          # Windows
+python3 main.py         # macOS/Linux
 
 # Load saved game
-python3 main.py --load
+python main.py --load
 
 # Show help
-python3 main.py --help
+python main.py --help
 ```
 
 ### Controls
 
+#### 2D Mode
 - **Movement**: `wasd`, `hjkl` (vi-style), or arrow keys
 - **Combat**: Move into enemies to attack them
 - **Inventory**: `i` to toggle inventory screen
+- **Magic**: `m/M` to view spells, `f/F` to cast spells
+- **Godmode**: `g/G` to toggle godmode
+- **3D Toggle**: `3` to switch to 3D mode
 - **Save**: `S` (capital S) to save game
 - **Quit**: `q`
+
+#### 3D Mode
+- **Turn**: Arrow keys (left/right)
+- **Move**: `w/a/s/d` keys
+- **Combat**: Walk into enemies
+- **All other controls**: Same as 2D mode
 
 ### Game Elements
 
@@ -54,6 +92,9 @@ python3 main.py --help
 - `!` - Health Potion (Green)
 - `)` - Weapon (Cyan)
 - `$` - Gold (Yellow)
+- `]` - Shield (Cyan)
+- `&` - Spellbook (Purple)
+- `B` - Boss (Red, Bold)
 
 ### Color Scheme
 
@@ -92,7 +133,52 @@ The game features a full color palette to enhance gameplay:
 
 ## Requirements
 
+### All Platforms
 - Python 3.6+
-- Unix-like system with curses support (Linux, macOS)
 
-The game uses only Python standard library modules, so no additional packages need to be installed.
+### Windows
+- `windows-curses` package (automatically installed by setup script)
+- Windows Terminal recommended for best experience
+
+### macOS & Linux
+- Built-in curses support (no additional packages needed)
+
+## Windows Troubleshooting
+
+If you encounter issues on Windows:
+
+1. **Install windows-curses**: `pip install windows-curses`
+2. **Use Windows Terminal** instead of Command Prompt
+3. **Check terminal size**: Ensure at least 100x30 characters
+4. **Run setup script**: `python setup_windows.py` for automatic configuration
+
+See `WINDOWS_SETUP.md` for detailed Windows installation instructions.
+
+## Magic System
+
+The game features a complete magic system:
+
+- **8 Different Spells**: Fireball, Heal, Magic Missile, Lightning Bolt, Shield, Teleport, Freeze, Poison Cloud
+- **Spellbooks**: Find spellbooks to learn new spells or equip for magic power bonuses
+- **Mana System**: Spells cost mana, which slowly regenerates each turn
+- **Spell Targeting**: Some spells require targeting with directional input
+- **Status Effects**: Shield protection, freezing enemies, poison damage over time
+
+## Boss Battles
+
+Encounter powerful bosses at deeper levels:
+
+- **Spawn at level 10+**: Guaranteed every 10 levels, 10% chance at level 15+
+- **Multiple Phases**: Bosses get more aggressive as health decreases
+- **Special Abilities**: Summon minions, dark magic blasts, teleport attacks, life drain, phase shifting
+- **Victory Condition**: Defeating any boss wins the game!
+
+## 3D Mode
+
+Toggle between 2D ASCII and 3D first-person view:
+
+- **Raycasting Engine**: Real-time 3D rendering in terminal
+- **Weapon Sprites**: See your equipped weapons on screen
+- **Shield Display**: Shields appear on the right side
+- **Minimap**: Small overhead view in 3D mode
+- **Same Gameplay**: All game mechanics work in both modes
