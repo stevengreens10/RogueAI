@@ -18,6 +18,7 @@ from game.save_load import SaveLoadSystem
 from game.intro import IntroScreen
 from game.renderer3d import Renderer3D
 from game.magic import MagicSystem
+from game.boss import BossSystem
 
 
 class Game:
@@ -41,6 +42,14 @@ class Game:
         self.magic_system = MagicSystem()
         self.spell_targeting = False
         self.targeting_spell = None
+        self.show_spells = False
+        
+        # Boss system
+        self.boss_system = BossSystem()
+        self.show_victory = False
+        
+        # Godmode
+        self.godmode = False
         
         if load_game and os.path.exists('savegame.json'):
             success, message = SaveLoadSystem.load_game(self)
@@ -81,6 +90,7 @@ class Game:
             curses.init_pair(9, curses.COLOR_WHITE, -1)    # Stairs
             curses.init_pair(10, curses.COLOR_MAGENTA, -1) # Shopkeeper
             curses.init_pair(11, curses.COLOR_MAGENTA, -1) # Spellbooks
+            curses.init_pair(12, curses.COLOR_RED, -1)     # Boss - red and bold
     
     def get_color_pair(self, entity_type=None, cell_type=None):
         if not curses.has_colors():
@@ -101,6 +111,8 @@ class Game:
                 return curses.color_pair(6)
             elif entity_type == EntityType.SPELLBOOK:
                 return curses.color_pair(11)  # Purple for spellbooks
+            elif entity_type == EntityType.BOSS:
+                return curses.color_pair(12) | curses.A_BOLD  # Red and bold for boss
         
         if cell_type:
             if cell_type == CellType.FLOOR:
@@ -121,7 +133,7 @@ class Game:
             self.messages.pop(0)
     
     def draw(self):
-        if self.render_3d and self.dungeon.player and not self.show_inventory and not self.in_shop and not self.show_death_screen and not self.show_levelup_screen:
+        if self.render_3d and self.dungeon.player and not self.show_inventory and not self.show_spells and not self.in_shop and not self.show_death_screen and not self.show_levelup_screen:
             # 3D rendering mode - player is at center of their tile
             player = self.dungeon.player
             self.renderer_3d.render_scene(self, float(player.pos.x) + 0.5, float(player.pos.y) + 0.5, player.angle)
@@ -157,12 +169,16 @@ class Game:
                 except curses.error:
                     pass
         
-        if self.show_death_screen:
+        if self.show_victory:
+            self.draw_victory_screen()
+        elif self.show_death_screen:
             self.draw_death_screen()
         elif self.show_levelup_screen:
             self.draw_levelup_screen()
         elif self.in_shop:
             self.draw_shop()
+        elif self.show_spells:
+            self.draw_spell_screen()
         elif self.show_inventory:
             self.draw_inventory()
         else:
@@ -193,8 +209,15 @@ class Game:
                     # Character level and XP
                     xp_for_next = LevelingSystem.xp_for_next_level(player.level)
                     xp_progress = LevelingSystem.get_xp_progress(player.xp, player.level)
-                    self.stdscr.addstr(ui_y, 65, f"Char Lv: {player.level}", ui_color)
-                    self.stdscr.addstr(ui_y + 1, 65, f"XP: {xp_progress}/{xp_for_next}", ui_color)
+                    
+                    if self.godmode:
+                        # Show godmode instead of level info
+                        godmode_color = curses.color_pair(6) | curses.A_BOLD if curses.has_colors() else curses.A_BOLD
+                        self.stdscr.addstr(ui_y, 65, "GODMODE", godmode_color)
+                        self.stdscr.addstr(ui_y + 1, 65, f"Lv: {player.level}", ui_color)
+                    else:
+                        self.stdscr.addstr(ui_y, 65, f"Char Lv: {player.level}", ui_color)
+                        self.stdscr.addstr(ui_y + 1, 65, f"XP: {xp_progress}/{xp_for_next}", ui_color)
                     
                     # Dungeon level
                     self.stdscr.addstr(ui_y + 1, 50, f"Floor: {self.current_level}", ui_color)
@@ -207,8 +230,12 @@ class Game:
                         equipment_line += 1
                     
                     if player.shield:
-                        shield_color = curses.color_pair(5) if curses.has_colors() else 0
-                        self.stdscr.addstr(ui_y + 1 + equipment_line, 0, f"Shield: {player.shield.name}", shield_color)
+                        if player.shield.type == EntityType.SPELLBOOK:
+                            spellbook_color = curses.color_pair(11) if curses.has_colors() else 0
+                            self.stdscr.addstr(ui_y + 1 + equipment_line, 0, f"Spellbook: {player.shield.name} (+{player.shield.magic_bonus})", spellbook_color)
+                        else:
+                            shield_color = curses.color_pair(5) if curses.has_colors() else 0
+                            self.stdscr.addstr(ui_y + 1 + equipment_line, 0, f"Shield: {player.shield.name} (+{player.shield.defense_bonus})", shield_color)
                         equipment_line += 1
                 
                 # Draw messages
@@ -224,9 +251,9 @@ class Game:
                 
                 # Instructions
                 if self.render_3d:
-                    self.stdscr.addstr(ui_y + 8, 0, "3D: Arrows turn, WASD move, I: inventory, F: cast spell, 3: toggle 2D/3D, S: save, Q: quit", ui_color)
+                    self.stdscr.addstr(ui_y + 8, 0, "3D: Arrows turn, WASD move, I: inventory, M: spells, F: cast, G: godmode, 3: toggle 2D/3D, S: save, Q: quit", ui_color)
                 else:
-                    self.stdscr.addstr(ui_y + 8, 0, "Move: wasd/hjkl/arrows, Inventory: i, F: cast spell, 3: toggle 2D/3D, Save: S, Quit: q", ui_color)
+                    self.stdscr.addstr(ui_y + 8, 0, "Move: wasd/hjkl/arrows, Inventory: i, M: spells, F: cast, G: godmode, 3: toggle 2D/3D, Save: S, Quit: q", ui_color)
                 
             except curses.error:
                 pass
@@ -236,7 +263,11 @@ class Game:
     def handle_input(self):
         key = self.stdscr.getch()
         
-        # Handle death screen input first
+        # Handle victory screen input first
+        if self.show_victory:
+            return self.handle_victory_screen_input(key)
+        
+        # Handle death screen input
         if self.show_death_screen:
             return self.handle_death_screen_input(key)
         
@@ -270,8 +301,28 @@ class Game:
         if key == ord('f') or key == ord('F'):  # Cast spell
             return self.handle_spell_casting()
         
+        if key == ord('m') or key == ord('M'):  # View spells
+            if not self.in_shop:
+                self.show_spells = not self.show_spells
+            return True
+        
+        if key == ord('g') or key == ord('G'):  # Toggle godmode
+            self.godmode = not self.godmode
+            status = "ON" if self.godmode else "OFF"
+            self.add_message(f"Godmode: {status}")
+            if self.godmode and self.dungeon.player:
+                # Restore full health and mana when enabling godmode
+                player = self.dungeon.player
+                player.hp = player.max_hp
+                player.mana = player.max_mana
+                self.add_message("Health and mana restored!")
+            return True
+        
         if self.spell_targeting:
             return self.handle_spell_targeting(key)
+        
+        if self.show_spells:
+            return self.handle_spell_screen_input(key)
         
         if self.show_inventory:
             return self.handle_inventory_input(key)
@@ -401,7 +452,13 @@ class Game:
             player.pos = new_pos
     
     def combat(self, attacker: Entity, defender: Entity):
-        damage = CombatSystem.calculate_damage(attacker, defender)
+        damage = CombatSystem.calculate_damage(attacker, defender, self.godmode)
+        
+        # Check for godmode protection
+        if self.godmode and defender == self.dungeon.player:
+            self.add_message(f"{attacker.name} attacks {defender.name} but godmode protects them!")
+            return
+        
         is_dead = CombatSystem.apply_damage(defender, damage)
         
         self.add_message(f"{attacker.name} attacks {defender.name} for {damage} damage!")
@@ -412,6 +469,13 @@ class Game:
                 self.show_death_screen = True
                 self.game_over = True
             else:
+                # Check if boss was defeated - victory condition!
+                if defender.type == EntityType.BOSS:
+                    self.add_message(f"You have defeated the mighty {defender.name}!")
+                    self.add_message("Victory! You are the champion of the dungeon!")
+                    self.show_victory = True
+                    self.game_over = True
+                
                 # Drop gold when monster dies
                 if defender.gold > 0:
                     self.dungeon.player.gold += defender.gold
@@ -433,24 +497,43 @@ class Game:
         # Regenerate player mana each turn
         player = self.dungeon.player
         if player and player.hp > 0:
-            if player.mana < player.max_mana:
+            if self.godmode:
+                # In godmode, keep health and mana at maximum
+                player.hp = player.max_hp
+                player.mana = player.max_mana
+            elif player.mana < player.max_mana:
                 player.mana = min(player.max_mana, player.mana + 1)  # Slow mana regen
             
             # Update magical effects
-            effect_messages = self.magic_system.update_effects(player)
+            effect_messages = self.magic_system.update_effects(player, is_player_in_godmode=self.godmode)
             for msg in effect_messages:
                 self.add_message(msg)
+        
+        # Initialize turn counter for boss abilities
+        if not hasattr(self, 'current_turn'):
+            self.current_turn = 0
+        self.current_turn += 1
         
         for entity in self.dungeon.entities:
             if entity.type in [EntityType.GOBLIN, EntityType.ORC] and entity.hp > 0:
                 # Update magical effects on monsters too
-                effect_messages = self.magic_system.update_effects(entity)
+                effect_messages = self.magic_system.update_effects(entity, is_player_in_godmode=False)
                 for msg in effect_messages:
                     self.add_message(msg)
                 
                 # Check if monster is frozen
                 if not self.magic_system.is_frozen(entity):
                     self.move_monster(entity)
+            
+            elif entity.type == EntityType.BOSS and entity.hp > 0:
+                # Update magical effects on boss
+                effect_messages = self.magic_system.update_effects(entity, is_player_in_godmode=False)
+                for msg in effect_messages:
+                    self.add_message(msg)
+                
+                # Check if boss is frozen
+                if not self.magic_system.is_frozen(entity):
+                    self.update_boss(entity)
     
     def move_monster(self, monster: Entity):
         player = self.dungeon.player
@@ -492,6 +575,68 @@ class Game:
                     not self.dungeon.get_entity_at(new_pos)):
                     monster.pos = new_pos
     
+    def update_boss(self, boss: Entity):
+        """Handle boss AI including movement, attacks, and special abilities"""
+        player = self.dungeon.player
+        if not player or player.hp <= 0:
+            return
+        
+        # Update boss phase based on health
+        self.boss_system.update_boss_phase(boss)
+        
+        # Check if boss should use a special ability
+        if self.boss_system.should_use_ability(boss, self.current_turn):
+            ability = self.boss_system.choose_boss_ability(boss, self.dungeon, self.current_turn)
+            if ability:
+                messages = self.boss_system.execute_boss_ability(boss, ability, self.dungeon, self.current_turn)
+                for msg in messages:
+                    self.add_message(msg)
+                return  # Boss used ability instead of moving
+        
+        # Normal boss movement towards player
+        dx = player.pos.x - boss.pos.x
+        dy = player.pos.y - boss.pos.y
+        distance = max(abs(dx), abs(dy))
+        
+        if distance <= 8:  # Boss can see player - move towards them
+            # Move one step towards player (diagonal movement allowed)
+            move_x = 1 if dx > 0 else -1 if dx < 0 else 0
+            move_y = 1 if dy > 0 else -1 if dy < 0 else 0
+            
+            new_pos = Position(boss.pos.x + move_x, boss.pos.y + move_y)
+            
+            # Check if attacking player
+            if new_pos.x == player.pos.x and new_pos.y == player.pos.y:
+                # Boss attacks are more powerful
+                self.boss_combat(boss, player)
+                return
+            
+            # Check if can move towards player
+            if (self.dungeon.is_walkable(new_pos) and 
+                not self.dungeon.get_entity_at(new_pos)):
+                boss.pos = new_pos
+    
+    def boss_combat(self, boss: Entity, player: Entity):
+        """Handle boss combat with special mechanics"""
+        damage = CombatSystem.calculate_damage(boss, player, self.godmode)
+        
+        # Bosses hit harder
+        damage = int(damage * 1.5)
+        
+        # Check for godmode protection
+        if self.godmode and player == self.dungeon.player:
+            self.add_message(f"{boss.name} unleashes a devastating attack but godmode protects you!")
+            return
+        
+        is_dead = CombatSystem.apply_damage(player, damage)
+        
+        self.add_message(f"{boss.name} unleashes a devastating attack on {player.name} for {damage} damage!")
+        
+        if is_dead:
+            self.add_message(f"{player.name} is defeated by the {boss.name}!")
+            self.show_death_screen = True
+            self.game_over = True
+    
     def pickup_item(self, item: Item, pos: Position):
         player = self.dungeon.player
         
@@ -505,7 +650,7 @@ class Game:
             else:
                 self.add_message("Your inventory is full!")
                 return
-        elif item.type in [EntityType.WEAPON, EntityType.SHIELD]:
+        elif item.type in [EntityType.WEAPON, EntityType.SHIELD, EntityType.SPELLBOOK]:
             if len(player.inventory) < 10:
                 player.inventory.append(item)
                 self.add_message(f"You picked up a {item.name}!")
@@ -537,7 +682,11 @@ class Game:
                 line += 1
             
             if self.dungeon.player.shield:
-                self.stdscr.addstr(line, 0, f"Shield: {self.dungeon.player.shield.name} (+{self.dungeon.player.shield.defense_bonus} defense)", weapon_color)
+                if self.dungeon.player.shield.type == EntityType.SPELLBOOK:
+                    spellbook_color = curses.color_pair(11) if curses.has_colors() else weapon_color
+                    self.stdscr.addstr(line, 0, f"Spellbook: {self.dungeon.player.shield.name} (+{self.dungeon.player.shield.magic_bonus} magic)", spellbook_color)
+                else:
+                    self.stdscr.addstr(line, 0, f"Shield: {self.dungeon.player.shield.name} (+{self.dungeon.player.shield.defense_bonus} defense)", weapon_color)
                 line += 1
             
             self.stdscr.addstr(line + 1, 0, "Items:", title_color)
@@ -552,6 +701,9 @@ class Game:
                 elif item.type == EntityType.SHIELD:
                     desc = f"{item.name} (+{item.defense_bonus} defense) - Press {i+1} to equip"
                     color = weapon_color
+                elif item.type == EntityType.SPELLBOOK:
+                    desc = f"{item.name} (+{item.magic_bonus} magic) - Press {i+1} to equip"
+                    color = curses.color_pair(11) if curses.has_colors() else default_color
                 elif item.type == EntityType.POTION:
                     desc = f"{item.name} (heals {item.heal_amount} HP) - Press {i+1} to use"
                     color = potion_color
@@ -605,11 +757,98 @@ class Game:
                     self.add_message(f"You used {item.name} and healed {healed} HP!")
                     
                 elif item.type == EntityType.SPELLBOOK:
-                    # Learn spell from spellbook
-                    success, message = self.magic_system.learn_spell_from_book(self.dungeon.player, item)
-                    self.add_message(message)
-                    if success:
-                        self.dungeon.player.inventory.pop(index)  # Remove spellbook after learning
+                    # Equip spellbook in shield slot
+                    if self.dungeon.player.shield:
+                        # Put current shield/spellbook back in inventory
+                        self.dungeon.player.inventory.append(self.dungeon.player.shield)
+                    
+                    self.dungeon.player.shield = item
+                    self.dungeon.player.inventory.pop(index)
+                    self.add_message(f"You equipped {item.name}!")
+        
+        return True
+    
+    def draw_spell_screen(self):
+        """Draw the spell viewing screen"""
+        self.stdscr.clear()
+        try:
+            title_color = curses.color_pair(8) | curses.A_BOLD if curses.has_colors() else curses.A_BOLD
+            default_color = curses.color_pair(1) if curses.has_colors() else 0
+            
+            # Title
+            self.stdscr.addstr(1, 0, "=== SPELLBOOK ===", title_color)
+            
+            player = self.dungeon.player
+            if not player:
+                return
+            
+            # Mana display
+            mana_color = curses.color_pair(11) if curses.has_colors() else default_color
+            self.stdscr.addstr(3, 0, f"Mana: {player.mana}/{player.max_mana}", mana_color)
+            
+            # Equipped spellbook
+            if player.shield and player.shield.type == EntityType.SPELLBOOK:
+                spellbook_color = curses.color_pair(11) if curses.has_colors() else default_color
+                self.stdscr.addstr(4, 0, f"Equipped: {player.shield.name}", spellbook_color)
+            
+            # Known spells
+            line = 6
+            self.stdscr.addstr(line, 0, "Known Spells:", title_color)
+            line += 1
+            
+            if player.known_spells:
+                for i, spell in enumerate(player.known_spells):
+                    spell_color = default_color
+                    if player.mana >= spell.mana_cost:
+                        spell_color = curses.color_pair(4) if curses.has_colors() else default_color  # Green if castable
+                    else:
+                        spell_color = curses.color_pair(3) if curses.has_colors() else default_color  # Red if not enough mana
+                    
+                    spell_text = f"  {spell.name} (Cost: {spell.mana_cost} MP)"
+                    self.stdscr.addstr(line, 0, spell_text, spell_color)
+                    self.stdscr.addstr(line + 1, 4, spell.description, curses.A_DIM)
+                    line += 3
+            else:
+                self.stdscr.addstr(line, 0, "  (No spells learned)", default_color)
+                line += 1
+            
+            # Available spells from equipped spellbook
+            spellbook_spells = self.magic_system.get_equipped_spellbook_spells(player)
+            if spellbook_spells:
+                line += 1
+                self.stdscr.addstr(line, 0, "Available from Equipped Spellbook:", title_color)
+                line += 1
+                
+                for spell in spellbook_spells:
+                    # Check if already known
+                    already_known = any(s.spell_type == spell.spell_type for s in player.known_spells)
+                    
+                    if already_known:
+                        spell_color = curses.A_DIM
+                        spell_text = f"  {spell.name} (Cost: {spell.mana_cost} MP) - Already Known"
+                    else:
+                        spell_color = curses.color_pair(6) if curses.has_colors() else default_color  # Gold for available
+                        spell_text = f"  {spell.name} (Cost: {spell.mana_cost} MP) - Press L to Learn"
+                    
+                    self.stdscr.addstr(line, 0, spell_text, spell_color)
+                    self.stdscr.addstr(line + 1, 4, spell.description, curses.A_DIM)
+                    line += 3
+            
+            # Instructions
+            self.stdscr.addstr(line + 1, 0, "Press 'L' to learn available spells", title_color)
+            self.stdscr.addstr(line + 2, 0, "Press 'M' to close spellbook", title_color)
+            
+        except curses.error:
+            pass
+    
+    def handle_spell_screen_input(self, key):
+        """Handle input in the spell screen"""
+        if key == ord('l') or key == ord('L'):
+            # Learn spell from equipped spellbook
+            player = self.dungeon.player
+            if player and player.shield and player.shield.type == EntityType.SPELLBOOK:
+                success, message = self.magic_system.learn_spell_from_book(player, player.shield)
+                self.add_message(message)
         
         return True
     
@@ -764,7 +1003,7 @@ class Game:
         
         # Spells that don't need targeting
         if spell.spell_type.value in ['heal', 'shield']:
-            success, message = self.magic_system.cast_spell(player, spell, self.dungeon)
+            success, message = self.magic_system.cast_spell(player, spell, self.dungeon, godmode=self.godmode)
             self.add_message(message)
             if success:
                 self.update_monsters()  # End turn after casting
@@ -799,7 +1038,7 @@ class Game:
             
             target_pos = Position(target_x, target_y)
             
-            success, message = self.magic_system.cast_spell(player, self.targeting_spell, self.dungeon, target_pos)
+            success, message = self.magic_system.cast_spell(player, self.targeting_spell, self.dungeon, target_pos, godmode=self.godmode)
             self.add_message(message)
             
             self.spell_targeting = False
@@ -975,6 +1214,74 @@ class Game:
         except curses.error:
             pass
     
+    def draw_victory_screen(self):
+        self.stdscr.clear()
+        try:
+            # Calculate center of screen
+            height, width = self.stdscr.getmaxyx()
+            center_y = height // 2
+            center_x = width // 2
+            
+            # Colors
+            victory_color = curses.color_pair(6) if curses.has_colors() else 0  # Gold/Yellow
+            title_color = curses.color_pair(8) if curses.has_colors() else 0  # Magenta
+            option_color = curses.color_pair(1) if curses.has_colors() else 0  # White
+            
+            # Victory message
+            victory_msg = "VICTORY!"
+            self.stdscr.addstr(center_y - 8, center_x - len(victory_msg) // 2, victory_msg, victory_color | curses.A_BOLD)
+            
+            champion_msg = "You are the Champion of the Dungeon!"
+            self.stdscr.addstr(center_y - 6, center_x - len(champion_msg) // 2, champion_msg, title_color)
+            
+            # Game stats
+            level_msg = f"You conquered {self.current_level} levels of the dungeon"
+            self.stdscr.addstr(center_y - 4, center_x - len(level_msg) // 2, level_msg, title_color)
+            
+            if self.dungeon.player:
+                char_level_msg = f"Character level: {self.dungeon.player.level}"
+                self.stdscr.addstr(center_y - 3, center_x - len(char_level_msg) // 2, char_level_msg, title_color)
+                
+                gold_msg = f"Final treasure: {self.dungeon.player.gold} gold"
+                self.stdscr.addstr(center_y - 2, center_x - len(gold_msg) // 2, gold_msg, victory_color)
+            
+            # Options
+            self.stdscr.addstr(center_y, center_x - 10, "What would you like to do?", title_color)
+            
+            self.stdscr.addstr(center_y + 2, center_x - 12, "1) Start a new adventure", option_color)
+            self.stdscr.addstr(center_y + 3, center_x - 12, "2) Load saved game", option_color)
+            self.stdscr.addstr(center_y + 4, center_x - 12, "3) Quit to desktop", option_color)
+            
+            # Instructions
+            instruction = "Press 1, 2, or 3 to select an option"
+            self.stdscr.addstr(center_y + 6, center_x - len(instruction) // 2, instruction, title_color)
+            
+        except curses.error:
+            pass
+    
+    def handle_victory_screen_input(self, key):
+        if key == ord('1'):
+            # Start new adventure
+            self.restart_game()
+            return True
+        elif key == ord('2'):
+            # Load saved game
+            if os.path.exists('savegame.json'):
+                success, message = SaveLoadSystem.load_game(self)
+                if success:
+                    self.show_victory = False
+                    self.game_over = False
+                    self.add_message(message)
+                else:
+                    self.add_message(message)
+            else:
+                self.add_message("No save file found!")
+            return True
+        elif key == ord('3'):
+            # Quit to desktop
+            return False
+        return True
+    
     def handle_death_screen_input(self, key):
         if key == ord('1'):
             # Restart from scratch
@@ -1004,12 +1311,15 @@ class Game:
         self.messages = []
         self.game_over = False
         self.show_inventory = False
+        self.show_spells = False
         self.in_shop = False
         self.shop = None
         self.current_level = 1
         self.show_death_screen = False
+        self.show_victory = False
         self.show_levelup_screen = False
         self.levelup_rewards = []
+        self.godmode = False
         
         # Generate new dungeon
         self.dungeon = Dungeon(level=self.current_level)

@@ -94,6 +94,16 @@ class Dungeon:
             self.stairs_pos = Position(x + w // 2, y + h // 2)
             self.grid[self.stairs_pos.y][self.stairs_pos.x] = CellType.STAIRS_DOWN
         
+        # Check if we should spawn a boss
+        from .boss import BossSystem
+        boss_system = BossSystem()
+        
+        if boss_system.should_spawn_boss(self.level):
+            boss = boss_system.create_boss(self.level)
+            boss_pos = boss_system.get_boss_spawn_position(self)
+            boss.pos = boss_pos
+            self.entities.append(boss)
+        
         # Place monsters and items in other rooms (but not the last room with stairs)
         for room in rooms[1:-1]:  # Skip first room (player) and last room (stairs)
             x, y, w, h = room

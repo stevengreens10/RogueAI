@@ -593,7 +593,10 @@ class Renderer3D:
                 self.stdscr.addstr(ui_y + 1, 1, weapon_info, ui_color)
             
             if player.shield:
-                shield_info = f"Shield: {player.shield.name}"
+                if player.shield.type == EntityType.SPELLBOOK:
+                    shield_info = f"Spellbook: {player.shield.name}"
+                else:
+                    shield_info = f"Shield: {player.shield.name}"
                 # Position shield info on the right side to match shield sprite
                 shield_x = self.width - len(shield_info) - 1
                 self.stdscr.addstr(ui_y + 1, shield_x, shield_info, ui_color)

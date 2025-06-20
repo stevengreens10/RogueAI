@@ -63,6 +63,7 @@ class SaveLoadSystem:
                         'attack_bonus': item.attack_bonus,
                         'defense_bonus': item.defense_bonus,
                         'heal_amount': item.heal_amount,
+                        'magic_bonus': item.magic_bonus,
                         'spell_type': item.spell_type.value if item.spell_type else None
                     }
                     entity_data['inventory'].append(item_data)
@@ -91,6 +92,7 @@ class SaveLoadSystem:
                         'attack_bonus': entity.weapon.attack_bonus,
                         'defense_bonus': entity.weapon.defense_bonus,
                         'heal_amount': entity.weapon.heal_amount,
+                        'magic_bonus': entity.weapon.magic_bonus,
                         'spell_type': entity.weapon.spell_type.value if entity.weapon.spell_type else None
                     }
                 else:
@@ -105,6 +107,7 @@ class SaveLoadSystem:
                         'attack_bonus': entity.shield.attack_bonus,
                         'defense_bonus': entity.shield.defense_bonus,
                         'heal_amount': entity.shield.heal_amount,
+                        'magic_bonus': entity.shield.magic_bonus,
                         'spell_type': entity.shield.spell_type.value if entity.shield.spell_type else None
                     }
                 else:
@@ -136,6 +139,7 @@ class SaveLoadSystem:
                         'attack_bonus': item.attack_bonus,
                         'defense_bonus': item.defense_bonus,
                         'heal_amount': item.heal_amount,
+                        'magic_bonus': item.magic_bonus,
                         'spell_type': item.spell_type.value if item.spell_type else None
                     }
                 })
@@ -230,6 +234,7 @@ class SaveLoadSystem:
                         attack_bonus=item_data['attack_bonus'],
                         defense_bonus=item_data['defense_bonus'],
                         heal_amount=item_data['heal_amount'],
+                        magic_bonus=item_data.get('magic_bonus', 0),
                         spell_type=spell_type
                     )
                     entity.inventory.append(item)
@@ -280,6 +285,7 @@ class SaveLoadSystem:
                         attack_bonus=weapon_data['attack_bonus'],
                         defense_bonus=weapon_data['defense_bonus'],
                         heal_amount=weapon_data['heal_amount'],
+                        magic_bonus=weapon_data.get('magic_bonus', 0),
                         spell_type=weapon_spell_type
                     )
                 
@@ -306,6 +312,7 @@ class SaveLoadSystem:
                         attack_bonus=shield_data['attack_bonus'],
                         defense_bonus=shield_data['defense_bonus'],
                         heal_amount=shield_data['heal_amount'],
+                        magic_bonus=shield_data.get('magic_bonus', 0),
                         spell_type=shield_spell_type
                     )
                 
@@ -355,6 +362,7 @@ class SaveLoadSystem:
                     attack_bonus=item_data['item']['attack_bonus'],
                     defense_bonus=item_data['item']['defense_bonus'],
                     heal_amount=item_data['item']['heal_amount'],
+                    magic_bonus=item_data['item'].get('magic_bonus', 0),
                     spell_type=item_spell_type
                 )
                 

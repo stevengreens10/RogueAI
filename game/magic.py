@@ -102,12 +102,14 @@ class MagicSystem:
         }
         
         name = random.choice(spellbook_names[spell_type])
-        value = spell.mana_cost * 10 + (level * 5)
+        magic_bonus = random.randint(1, 3) + (level - 1)  # 1-3 base + level scaling
+        value = spell.mana_cost * 10 + (level * 5) + (magic_bonus * 15)
         
         return Item(
             name=name,
             type=EntityType.SPELLBOOK,
             value=value,
+            magic_bonus=magic_bonus,
             spell_type=spell_type
         )
     
@@ -127,9 +129,28 @@ class MagicSystem:
         player.known_spells.append(spell)
         return True, f"You learned {spell.name}!"
     
+    def get_equipped_spellbook_spells(self, player):
+        """Get spells available from equipped spellbook"""
+        if not player.shield or player.shield.type != EntityType.SPELLBOOK:
+            return []
+        
+        if player.shield.spell_type is None:
+            return []
+        
+        spell = self.spell_definitions[player.shield.spell_type]
+        return [spell]
+    
     def can_cast_spell(self, caster, spell):
         """Check if a caster can cast a specific spell"""
-        if spell not in caster.known_spells:
+        # Check if spell is known or available from equipped spellbook
+        spell_known = spell in caster.known_spells
+        spell_from_book = False
+        
+        if not spell_known:
+            spellbook_spells = self.get_equipped_spellbook_spells(caster)
+            spell_from_book = any(s.spell_type == spell.spell_type for s in spellbook_spells)
+        
+        if not spell_known and not spell_from_book:
             return False, "You don't know this spell."
         
         if caster.mana < spell.mana_cost:
@@ -137,20 +158,22 @@ class MagicSystem:
         
         return True, ""
     
-    def cast_spell(self, caster, spell, dungeon, target_pos=None):
+    def cast_spell(self, caster, spell, dungeon, target_pos=None, godmode=False):
         """Cast a spell and apply its effects"""
         can_cast, reason = self.can_cast_spell(caster, spell)
-        if not can_cast:
+        if not can_cast and not godmode:  # Godmode bypasses mana requirements
             return False, reason
         
-        # Consume mana
-        caster.mana -= spell.mana_cost
+        # Consume mana (unless in godmode)
+        if not godmode:
+            caster.mana -= spell.mana_cost
         
         # Apply spell effects based on spell type
         result_message = ""
         
         if spell.spell_type == SpellType.HEAL:
-            heal_amount = min(spell.heal_amount, caster.max_hp - caster.hp)
+            magic_bonus = self._get_magic_bonus(caster)
+            heal_amount = min(spell.heal_amount + magic_bonus, caster.max_hp - caster.hp)
             caster.hp += heal_amount
             result_message = f"You heal for {heal_amount} HP!"
         
@@ -195,10 +218,13 @@ class MagicSystem:
         if not self._has_line_of_sight(caster.pos, target_pos, dungeon):
             return f"{spell.name} is blocked!"
         
+        # Calculate magic bonus from equipped spellbook
+        magic_bonus = self._get_magic_bonus(caster)
+        
         # Find target entity
         target = self._find_entity_at_position(dungeon, target_pos)
         if target and target != caster:
-            damage = spell.damage + random.randint(-2, 2)  # Add some variance
+            damage = spell.damage + magic_bonus + random.randint(-2, 2)  # Add magic bonus and variance
             target.hp -= damage
             
             if target.hp <= 0:
@@ -234,6 +260,7 @@ class MagicSystem:
         if distance > spell.range:
             return f"{spell.name} is out of range!"
         
+        magic_bonus = self._get_magic_bonus(caster)
         affected_count = 0
         
         # Affect entities in a 3x3 area around target
@@ -244,7 +271,8 @@ class MagicSystem:
                 
                 if target and target != caster:
                     if spell.damage > 0:
-                        target.hp -= spell.damage
+                        damage = spell.damage + magic_bonus
+                        target.hp -= damage
                     
                     if spell.status_effect:
                         self._apply_status_effect(target, spell.status_effect, spell.duration)
@@ -288,7 +316,7 @@ class MagicSystem:
         # Add new effect
         entity.active_effects.append((effect_name, duration))
     
-    def update_effects(self, entity):
+    def update_effects(self, entity, is_player_in_godmode=False):
         """Update temporary effects on an entity (call each turn)"""
         effects_to_remove = []
         messages = []
@@ -303,8 +331,11 @@ class MagicSystem:
                 
                 # Apply ongoing effects
                 if effect_name == "poisoned":
-                    entity.hp -= 2
-                    messages.append(f"{entity.name} takes 2 poison damage!")
+                    if is_player_in_godmode:
+                        messages.append(f"{entity.name} resists poison damage (godmode)!")
+                    else:
+                        entity.hp -= 2
+                        messages.append(f"{entity.name} takes 2 poison damage!")
         
         # Remove expired effects (in reverse order to maintain indices)
         for i in reversed(effects_to_remove):
@@ -381,7 +412,32 @@ class MagicSystem:
     def get_available_spells(self, caster):
         """Get list of spells the caster can currently cast"""
         available = []
+        
+        # Add learned spells
         for spell in caster.known_spells:
             can_cast, _ = self.can_cast_spell(caster, spell)
             available.append((spell, can_cast))
+        
+        # Add spells from equipped spellbook
+        spellbook_spells = self.get_equipped_spellbook_spells(caster)
+        for spell in spellbook_spells:
+            # Check if we already have this spell in the list (avoid duplicates)
+            spell_already_listed = any(s.spell_type == spell.spell_type for s, _ in available)
+            if not spell_already_listed:
+                can_cast, _ = self.can_cast_spell_from_item(caster, spell)
+                available.append((spell, can_cast))
+        
         return available
+    
+    def can_cast_spell_from_item(self, caster, spell):
+        """Check if a caster can cast a spell from an equipped item"""
+        if caster.mana < spell.mana_cost:
+            return False, f"Not enough mana. Need {spell.mana_cost}, have {caster.mana}."
+        
+        return True, ""
+    
+    def _get_magic_bonus(self, caster):
+        """Get magic bonus from equipped spellbook"""
+        if hasattr(caster, 'shield') and caster.shield and caster.shield.type == EntityType.SPELLBOOK:
+            return caster.shield.magic_bonus
+        return 0

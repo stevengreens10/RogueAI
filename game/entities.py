@@ -17,6 +17,7 @@ class EntityType(Enum):
     GOLD = '$'
     SHOPKEEPER = 'S'
     SPELLBOOK = '&'
+    BOSS = 'B'
 
 
 class SpellType(Enum):
@@ -47,6 +48,7 @@ class Item:
     attack_bonus: int = 0
     defense_bonus: int = 0
     heal_amount: int = 0
+    magic_bonus: int = 0  # For spellbooks - increases spell damage/healing
     spell_type: Optional['SpellType'] = None  # For spellbooks
 
 
@@ -85,6 +87,10 @@ class Entity:
     max_mana: int = 20
     known_spells: List['Spell'] = None  # Spells the entity knows
     active_effects: List[tuple] = None  # (effect_name, duration) tuples
+    # Boss-specific attributes
+    boss_phase: int = 1  # Boss phases (1, 2, 3)
+    special_abilities: List[str] = None  # Boss special abilities
+    last_ability_turn: int = 0  # Cooldown tracking
     
     def __post_init__(self):
         if self.inventory is None:
@@ -93,6 +99,8 @@ class Entity:
             self.known_spells = []
         if self.active_effects is None:
             self.active_effects = []
+        if self.special_abilities is None:
+            self.special_abilities = []
     
     @property
     def equipment(self):
